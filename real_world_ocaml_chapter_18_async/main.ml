@@ -80,6 +80,7 @@ let my_bind (deferred : 'a Deferred.t) ~(f : 'a -> 'b Deferred.t) :
   upon deferred (fun x -> upon (f x) (fun y -> Ivar.fill ivar y));
   Ivar.read ivar
 
+(* Copy data from the reader to the writer, using the provided buffer as scratch space *)
 let rec copy_blocks (buffer : bytes) (reader : Reader.t) (writer : Writer.t) :
     unit Deferred.t =
   match%bind Reader.read reader buffer with
@@ -88,5 +89,16 @@ let rec copy_blocks (buffer : bytes) (reader : Reader.t) (writer : Writer.t) :
       Writer.write writer (Bytes.to_string buffer) ~len:bytes_read;
       let%bind () = Writer.flushed writer in
       copy_blocks buffer reader writer
+
+(** Starts a TCP server, which listens on the specific port, invoking copy_blocks every time a client connects. *)
+let run () =
+  let host_and_port =
+    Tcp.Server.create ~on_handler_error:`Raise
+      (Tcp.Where_to_listen.of_port 8765) (fun _addr reader writer ->
+        let buffer = Bytes.create (16 * 1024) in
+        copy_blocks buffer reader writer)
+  in
+  ignore (host_and_port : (Socket.Address.Inet.t, int) Tcp.Server.t Deferred.t);
+  never_returns (Scheduler.go ())
 
 let%test_unit "debug" = blocking_file_ops_example ()
