@@ -80,4 +80,13 @@ let my_bind (deferred : 'a Deferred.t) ~(f : 'a -> 'b Deferred.t) :
   upon deferred (fun x -> upon (f x) (fun y -> Ivar.fill ivar y));
   Ivar.read ivar
 
+let rec copy_blocks (buffer : bytes) (reader : Reader.t) (writer : Writer.t) :
+    unit Deferred.t =
+  match%bind Reader.read reader buffer with
+  | `Eof -> return ()
+  | `Ok bytes_read ->
+      Writer.write writer (Bytes.to_string buffer) ~len:bytes_read;
+      let%bind () = Writer.flushed writer in
+      copy_blocks buffer reader writer
+
 let%test_unit "debug" = blocking_file_ops_example ()
