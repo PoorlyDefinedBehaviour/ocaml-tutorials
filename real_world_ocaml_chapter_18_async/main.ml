@@ -74,4 +74,10 @@ module Delayer : Delayer_intf = struct
     Ivar.read ivar
 end
 
+let my_bind (deferred : 'a Deferred.t) ~(f : 'a -> 'b Deferred.t) :
+    'b Deferred.t =
+  let ivar = Ivar.create () in
+  upon deferred (fun x -> upon (f x) (fun y -> Ivar.fill ivar y));
+  Ivar.read ivar
+
 let%test_unit "debug" = blocking_file_ops_example ()
