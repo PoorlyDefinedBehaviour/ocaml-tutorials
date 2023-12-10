@@ -101,4 +101,44 @@ let run () =
   ignore (host_and_port : (Socket.Address.Inet.t, int) Tcp.Server.t Deferred.t);
   never_returns (Scheduler.go ())
 
+let query_uri (query : string) : Uri.t =
+  let base_uri = Uri.of_string "http://api.duckduckgo.com/?format=json" in
+  Uri.add_query_param base_uri ("q", [ query ])
+
+(* Extract the "Definition" or "Abstract" field from the DuckDuckGo results *)
+let get_definition_from_json (json : string) =
+  match Yojson.Safe.from_string json with
+  | `Assoc kv_list -> (
+      let find key =
+        match List.Assoc.find ~equal:String.equal kv_list key with
+        | None | Some (`String "") -> None
+        | Some s -> Some (Yojson.Safe.to_string s)
+      in
+      match find "Abstract" with Some _ as x -> x | None -> find "Definition")
+  | _ -> None
+
+(* Execute the DuckDuckGo search *)
+let get_definition (word : string) : (string * string option) Deferred.t =
+  let%bind _, body = Cohttp_async.Client.get (query_uri word) in
+  let%map string = Cohttp_async.Body.to_string body in
+  (word, get_definition_from_json string)
+
+let print_result (word, definition) : unit =
+  printf "%s\n%s\n\n%s\n\n" word
+    (String.init (String.length word) ~f:(fun _ -> '_'))
+    (match definition with
+    | None -> "No definition found"
+    | Some def -> String.concat ~sep:"\n" (Wrapper.wrap (Wrapper.make 70) def))
+
+(* Run many searches in parllel, printing out the results after they're all done. *)
+let search_and_print (words : string list) : unit Deferred.t =
+  let%map results = Deferred.all (List.map words ~f:get_definition) in
+  List.iter results ~f:print_result
+
+let search_cmd () : unit =
+  Command.async ~summary:"Retrieve definitions from DuckDuckGo search engine"
+    (let%map_open.Command words = anon (sequence ("Word" %: string)) in
+     fun () -> search_and_print words)
+  |> Command_unix.run
+
 let%test_unit "debug" = blocking_file_ops_example ()
