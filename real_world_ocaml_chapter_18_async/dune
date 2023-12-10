@@ -1,6 +1,6 @@
 (library
  (name main)
- (libraries core)
+ (libraries core async)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test)))
