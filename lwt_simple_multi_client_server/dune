@@ -1,0 +1,10 @@
+(executable
+ (name main)
+ (libraries lwt lwt.unix logs logs.lwt)
+ (preprocess
+  (pps ppx_let)))
+
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A))))
